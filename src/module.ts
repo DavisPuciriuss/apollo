@@ -5,14 +5,22 @@ import { useLogger, addPlugin, addImports, addTemplate, createResolver, defineNu
 import GraphQLPlugin from '@rollup/plugin-graphql'
 import type { PluginOption } from 'vite'
 import { name, version } from '../package.json'
-import type { ClientConfig, NuxtApolloConfig, ErrorResponse } from './types'
+import type { ClientConfig, NuxtApolloConfig, ErrorResponse, ClientConfigFactory } from './types'
 import { serializeConfig } from './serialize'
 
 export type { ClientConfig, ErrorResponse }
 
 const logger = useLogger(name)
 
-async function readConfigFile (path: string): Promise<ClientConfig> {
+function isClientConfig(value: any): value is ClientConfig {
+  return typeof value === 'object' && value !== null;
+}
+
+function isClientConfigFactory(value: any): value is ClientConfigFactory {
+  return typeof value === 'function';
+}
+
+async function readConfigFile (path: string): Promise<ClientConfig | ClientConfigFactory> {
   return await jiti(import.meta.url, { esmResolve: true, interopDefault: true, requireCache: false })(path)
 }
 
@@ -66,15 +74,24 @@ export default defineNuxtModule<ModuleOptions>({
       for (let [k, v] of Object.entries(options.clients || {})) {
         if (typeof v === 'string') {
           const path = rootResolver.resolve(v)
-          const resolvedConfig = existsSync(path) && await readConfigFile(path)
+          let resolvedConfig = existsSync(path) && await readConfigFile(path)
 
           if (!resolvedConfig) {
             logger.warn(`Unable to resolve Apollo config for client: ${k}`)
             continue
           }
 
+          if (isClientConfigFactory(resolvedConfig)) {
+            resolvedConfig = resolvedConfig(nuxt)
+          }
+
           v = resolvedConfig
           if (!configPaths[k]) { configPaths[k] = path }
+        }
+
+        if (!isClientConfig(v)) {
+          logger.warn(`Invalid Apollo config for client: ${k}`)
+          continue
         }
 
         v.authType = (v?.authType === undefined ? options.authType : v?.authType) || null
@@ -195,7 +212,7 @@ export default defineNuxtModule<ModuleOptions>({
   }
 })
 
-export const defineApolloClient = (config: ClientConfig) => config
+export const defineApolloClient = (config: ClientConfig | ClientConfigFactory) => config
 
 export interface ModuleRuntimeConfig {
   apollo: NuxtApolloConfig<any>
