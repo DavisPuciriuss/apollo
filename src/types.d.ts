@@ -1,9 +1,12 @@
 import type { ClientOptions } from 'graphql-ws'
 import type { HttpOptions, DefaultOptions, InMemoryCacheConfig } from '@apollo/client'
 import type { CookieOptions } from 'nuxt/app'
+import type { Nuxt } from '@nuxt/schema';
 export type { ErrorResponse } from '@apollo/client/link/error'
 
 type CookieAttributes = Omit< CookieOptions, 'encode' | 'decode' | 'expires' | 'default'>;
+
+export type ClientConfigFactory = (context: Nuxt) => ClientConfig;
 
 export type ClientConfig = {
   /**

@@ -1,6 +1,12 @@
 export default defineNuxtConfig({
   devtools: { enabled: true },
 
+  runtimeConfig: {
+    public: {
+      defaultApi: 'https://spacex-api-2gl6xp7kua-ue.a.run.app'
+    }
+  },
+
   modules: ['@nuxt/ui', '@nuxtjs/apollo'],
 
   colorMode: {
