@@ -1,10 +1,9 @@
 {
   "name": "@dpuciriuss/apollo",
-  "version": "5.0.0-alpha.15",
+  "version": "5.0.0-alpha.16",
   "license": "MIT",
   "repository": {
-    "type": "git",
-    "url": "git+https://github.com/nuxt-modules/apollo-module.git"
+    "url": "https://github.com/DavisPuciriuss/apollo"
   },
   "homepage": "https://apollo.nuxtjs.org",
   "type": "module",
@@ -68,6 +67,6 @@
     "doc": "docs"
   },
   "bugs": {
-    "url": "https://github.com/nuxt-modules/apollo-module/issues"
+    "url": "https://github.com/DavisPuciriuss/apollo/issues"
   }
 }
