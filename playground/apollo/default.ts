@@ -1,31 +1,36 @@
-import { defineApolloClient } from '@nuxtjs/apollo/config'
+import { defineApolloClient, type ClientConfig } from '@nuxtjs/apollo/config'
+import type { Nuxt } from '@nuxt/schema';
 
-export default defineApolloClient({
-  // The GraphQL endpoint.
-  httpEndpoint: 'https://spacex-api-2gl6xp7kua-ue.a.run.app/query',
+export default defineApolloClient((context: Nuxt): ClientConfig => {
+  const runtimeConfig = context.options.runtimeConfig;
 
-  // Provide a GraphQL endpoint to be used client-side. Overrides `httpEndpoint`.
-  // browserHttpEndpoint: '/graphql',
+  return {
+    // The GraphQL endpoint.
+    httpEndpoint: runtimeConfig.public.defaultApi + '/query',
 
-  // See https://www.apollographql.com/docs/link/links/http.html#options
-  httpLinkOptions: {
-    credentials: 'same-origin'
-  },
+    // Provide a GraphQL endpoint to be used client-side. Overrides `httpEndpoint`.
+    // browserHttpEndpoint: '/graphql',
 
-  defaultOptions: {
-    watchQuery: {
-      fetchPolicy: 'cache-and-network'
-    }
-  },
+    // See https://www.apollographql.com/docs/link/links/http.html#options
+    httpLinkOptions: {
+      credentials: 'same-origin'
+    },
 
-  // Specify a websocket endpoint to be used for subscriptions.
-  // The `wss` protocol is recommended in production.
-  // wsEndpoint: 'ws://localhost:4000',
+    defaultOptions: {
+      watchQuery: {
+        fetchPolicy: 'cache-and-network'
+      }
+    },
 
-  // LocalStorage token
-  tokenName: 'spacex-token',
+    // Specify a websocket endpoint to be used for subscriptions.
+    // The `wss` protocol is recommended in production.
+    // wsEndpoint: 'ws://localhost:4000',
 
-  // Specify if the client should solely use WebSocket.
-  // requires `wsEndpoint`.
-  websocketsOnly: false
+    // LocalStorage token
+    tokenName: 'spacex-token',
+
+    // Specify if the client should solely use WebSocket.
+    // requires `wsEndpoint`.
+    websocketsOnly: false
+  }
 })
