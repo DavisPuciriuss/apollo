@@ -1,5 +1,5 @@
 import type { ClientOptions } from 'graphql-ws'
-import type { HttpOptions, DefaultOptions, InMemoryCacheConfig } from '@apollo/client'
+import type { HttpOptions, DefaultOptions, InMemoryCacheConfig, ApolloLink } from '@apollo/client'
 import type { CookieOptions } from 'nuxt/app'
 import type { Nuxt } from '@nuxt/schema';
 export type { ErrorResponse } from '@apollo/client/link/error'
@@ -103,6 +103,11 @@ export type ClientConfig = {
    * Configuration for the auth cookie.
    **/
   cookieAttributes?: CookieAttributes;
+
+  /**
+   * Apollo link definition for the client.
+   */
+  link?: ApolloLink;
 };
 
 export interface NuxtApolloConfig<T = false> {

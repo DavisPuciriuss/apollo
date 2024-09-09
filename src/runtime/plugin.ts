@@ -21,98 +21,104 @@ export default defineNuxtPlugin((nuxtApp) => {
   const clients = {} as Record<ApolloClientKeys, ApolloClient<any>>
 
   for (const [key, clientConfig] of Object.entries(NuxtApollo.clients) as [ApolloClientKeys, ClientConfig][]) {
-    const getAuth = async () => {
-      const token = ref<string | null>(null)
+    let link = null;
 
-      await nuxtApp.callHook('apollo:auth', { token, client: key })
-
-      if (!token.value) {
-        if (clientConfig.tokenStorage === 'cookie') {
-          if (process.client) {
-            const t = useCookie(clientConfig.tokenName!).value
-            if (t) { token.value = t }
-          } else if (requestCookies?.cookie) {
-            const t = requestCookies.cookie.split(';').find(c => c.trim().startsWith(`${clientConfig.tokenName}=`))?.split('=')?.[1]
-            if (t) { token.value = t }
+    if (!clientConfig.link) {
+      const getAuth = async () => {
+        const token = ref<string | null>(null)
+  
+        await nuxtApp.callHook('apollo:auth', { token, client: key })
+  
+        if (!token.value) {
+          if (clientConfig.tokenStorage === 'cookie') {
+            if (process.client) {
+              const t = useCookie(clientConfig.tokenName!).value
+              if (t) { token.value = t }
+            } else if (requestCookies?.cookie) {
+              const t = requestCookies.cookie.split(';').find(c => c.trim().startsWith(`${clientConfig.tokenName}=`))?.split('=')?.[1]
+              if (t) { token.value = t }
+            }
+          } else if (process.client && clientConfig.tokenStorage === 'localStorage') {
+            token.value = localStorage.getItem(clientConfig.tokenName!)
           }
-        } else if (process.client && clientConfig.tokenStorage === 'localStorage') {
-          token.value = localStorage.getItem(clientConfig.tokenName!)
+  
+          if (!token.value) { return }
         }
-
-        if (!token.value) { return }
+  
+        const authScheme = !!token.value?.match(/^[a-zA-Z]+\s/)?.[0]
+  
+        if (authScheme || clientConfig?.authType === null) { return token.value }
+  
+        return `${clientConfig?.authType} ${token.value}`
       }
 
-      const authScheme = !!token.value?.match(/^[a-zA-Z]+\s/)?.[0]
+      const authLink = setContext(async (_, { headers }) => {
+        const auth = await getAuth()
 
-      if (authScheme || clientConfig?.authType === null) { return token.value }
+        if (!auth) { return }
 
-      return `${clientConfig?.authType} ${token.value}`
-    }
-
-    const authLink = setContext(async (_, { headers }) => {
-      const auth = await getAuth()
-
-      if (!auth) { return }
-
-      return {
-        headers: {
-          ...headers,
-          ...(requestCookies && requestCookies),
-          [clientConfig.authHeader!]: auth
-        }
-      }
-    })
-
-    const httpLink = authLink.concat(createHttpLink({
-      ...(clientConfig?.httpLinkOptions && clientConfig.httpLinkOptions),
-      uri: (process.client && clientConfig.browserHttpEndpoint) || clientConfig.httpEndpoint,
-      headers: { ...(clientConfig?.httpLinkOptions?.headers || {}) }
-    }))
-
-    let wsLink: GraphQLWsLink | null = null
-
-    if (process.client && clientConfig.wsEndpoint) {
-      const wsClient = createRestartableClient({
-        ...clientConfig.wsLinkOptions,
-        url: clientConfig.wsEndpoint,
-        connectionParams: async () => {
-          const auth = await getAuth()
-
-          if (!auth) { return }
-
-          return { headers: { [clientConfig.authHeader!]: auth } }
+        return {
+          headers: {
+            ...headers,
+            ...(requestCookies && requestCookies),
+            [clientConfig.authHeader!]: auth
+          }
         }
       })
 
-      wsLink = new GraphQLWsLink(wsClient)
+      const httpLink = authLink.concat(createHttpLink({
+        ...(clientConfig?.httpLinkOptions && clientConfig.httpLinkOptions),
+        uri: (process.client && clientConfig.browserHttpEndpoint) || clientConfig.httpEndpoint,
+        headers: { ...(clientConfig?.httpLinkOptions?.headers || {}) }
+      }))
 
-      nuxtApp._apolloWsClients = nuxtApp._apolloWsClients || {}
+      const errorLink = onError((err) => {
+        nuxtApp.callHook('apollo:error', err)
+      })
 
-      // @ts-ignore
-      nuxtApp._apolloWsClients[key] = wsClient
+      let wsLink: GraphQLWsLink | null = null
+
+      if (process.client && clientConfig.wsEndpoint) {
+        const wsClient = createRestartableClient({
+          ...clientConfig.wsLinkOptions,
+          url: clientConfig.wsEndpoint,
+          connectionParams: async () => {
+            const auth = await getAuth()
+
+            if (!auth) { return }
+
+            return { headers: { [clientConfig.authHeader!]: auth } }
+          }
+        })
+
+        wsLink = new GraphQLWsLink(wsClient)
+
+        nuxtApp._apolloWsClients = nuxtApp._apolloWsClients || {}
+
+        // @ts-ignore
+        nuxtApp._apolloWsClients[key] = wsClient
+      }
+
+      link = ApolloLink.from([
+        errorLink,
+        ...(!wsLink
+          ? [httpLink]
+          : [
+              ...(clientConfig?.websocketsOnly
+                ? [wsLink]
+                : [
+                    split(({ query }) => {
+                      const definition = getMainDefinition(query)
+                      return (definition.kind === 'OperationDefinition' && definition.operation === 'subscription')
+                    },
+                    wsLink,
+                    httpLink)
+                  ])
+            ])
+      ])
+    } else {
+      link = clientConfig.link
     }
-
-    const errorLink = onError((err) => {
-      nuxtApp.callHook('apollo:error', err)
-    })
-
-    const link = ApolloLink.from([
-      errorLink,
-      ...(!wsLink
-        ? [httpLink]
-        : [
-            ...(clientConfig?.websocketsOnly
-              ? [wsLink]
-              : [
-                  split(({ query }) => {
-                    const definition = getMainDefinition(query)
-                    return (definition.kind === 'OperationDefinition' && definition.operation === 'subscription')
-                  },
-                  wsLink,
-                  httpLink)
-                ])
-          ])
-    ])
 
     const cache = new InMemoryCache(clientConfig.inMemoryCacheOptions)
 
