@@ -77,8 +77,6 @@ export default defineNuxtPlugin((nuxtApp) => {
       })
     }
 
-    const httpLink = authLink.concat(finalLayer)
-
     const errorLink = onError((err) => {
       nuxtApp.callHook('apollo:error', { client: key, error: err })
     })
@@ -106,23 +104,20 @@ export default defineNuxtPlugin((nuxtApp) => {
       nuxtApp._apolloWsClients[key] = wsClient
     }
 
-    const link = ApolloLink.from([
-      errorLink,
-      ...(!wsLink
-        ? [httpLink]
-        : [
-            ...(clientConfig?.websocketsOnly
-              ? [wsLink]
-              : [
-                  split(({ query }) => {
-                    const definition = getMainDefinition(query)
-                    return (definition.kind === 'OperationDefinition' && definition.operation === 'subscription')
-                  },
-                  wsLink,
-                  httpLink)
-                ])
-          ])
-    ])
+    let link = null;
+
+    if (!wsLink) {
+      link = ApolloLink.from([errorLink, authLink, finalLayer])
+    } else {
+      link = ApolloLink.from([
+        split(({ query }) => {
+          const definition = getMainDefinition(query)
+          return (definition.kind === 'OperationDefinition' && definition.operation === 'subscription')
+        },
+        wsLink,
+        authLink.concat(finalLayer))
+      ])
+    }
 
     const cache = new InMemoryCache(clientConfig.inMemoryCacheOptions)
 
