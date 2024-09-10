@@ -78,10 +78,11 @@ export default defineNuxtPlugin((nuxtApp) => {
     });
 
     if (clientConfig.usePersistedQuery) {
-      httpLink = createPersistedQueryLink({
+      const persistedQuery = createPersistedQueryLink({
         sha256,
         useGETForHashedQueries: clientConfig.httpLinkOptions?.useGETForQueries ?? false,
-      }).concat(httpLink);
+      });
+      httpLink = persistedQuery.concat(httpLink);
     }
 
     const errorLink = onError((err) => {
