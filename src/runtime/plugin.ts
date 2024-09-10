@@ -4,6 +4,7 @@ import { getMainDefinition } from '@apollo/client/utilities'
 import { createApolloProvider } from '@vue/apollo-option'
 import { ApolloClients, provideApolloClients } from '@vue/apollo-composable'
 import { ApolloClient, ApolloLink, createHttpLink, InMemoryCache, split, type DefaultContext, type GraphQLRequest } from '@apollo/client/core'
+import { createPersistedQueryLink } from '@apollo/client/link/persisted-queries'
 import { GraphQLWsLink } from '@apollo/client/link/subscriptions'
 import { setContext } from '@apollo/client/link/context'
 import type { ClientConfig, ErrorResponse } from '../types'
@@ -11,9 +12,12 @@ import createRestartableClient from './ws'
 import { useApollo } from './composables'
 import { ref, useCookie, defineNuxtPlugin, useRequestHeaders } from '#imports'
 import type { Ref } from '#imports'
+import { createHash } from 'crypto'
 
 import { NuxtApollo } from '#apollo'
 import type { ApolloClientKeys } from '#apollo'
+
+const sha256 = (data: string): string => createHash('sha256').update(data).digest('hex');
 
 export default defineNuxtPlugin((nuxtApp) => {
   const requestCookies = (process.server && NuxtApollo.proxyCookies && useRequestHeaders(['cookie'])) || undefined
@@ -69,14 +73,17 @@ export default defineNuxtPlugin((nuxtApp) => {
       }
     })
 
-    let finalLayer = clientConfig.link
+    let httpLink = createHttpLink({
+      ...(clientConfig?.httpLinkOptions && clientConfig.httpLinkOptions),
+      uri: (process.client && clientConfig.browserHttpEndpoint) || clientConfig.httpEndpoint,
+      headers: { ...(clientConfig?.httpLinkOptions?.headers || {}) }
+    });
 
-    if (!finalLayer) {
-      finalLayer = createHttpLink({
-        ...(clientConfig?.httpLinkOptions && clientConfig.httpLinkOptions),
-        uri: (process.client && clientConfig.browserHttpEndpoint) || clientConfig.httpEndpoint,
-        headers: { ...(clientConfig?.httpLinkOptions?.headers || {}) }
-      })
+    if (clientConfig.usePersistedQuery) {
+      httpLink = createPersistedQueryLink({
+        sha256,
+        useGETForHashedQueries: clientConfig.httpLinkOptions?.useGETForQueries ?? false,
+      }).concat(httpLink);
     }
 
     const errorLink = onError((err) => {
@@ -109,7 +116,7 @@ export default defineNuxtPlugin((nuxtApp) => {
     let link = null;
 
     if (!wsLink) {
-      link = ApolloLink.from([errorLink, authLink, finalLayer])
+      link = ApolloLink.from([errorLink, authLink, httpLink])
     } else {
       link = ApolloLink.from([
         split(({ query }) => {
@@ -117,7 +124,7 @@ export default defineNuxtPlugin((nuxtApp) => {
           return (definition.kind === 'OperationDefinition' && definition.operation === 'subscription')
         },
         wsLink,
-        authLink.concat(finalLayer))
+        authLink.concat(httpLink))
       ])
     }
 
