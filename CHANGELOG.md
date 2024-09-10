@@ -2,6 +2,8 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [5.0.0-alpha.30](https://github.com/DavisPuciriuss/apollo/compare/v5.0.0-alpha.29...v5.0.0-alpha.30) (2024-09-10)
+
 ## [5.0.0-alpha.29](https://github.com/DavisPuciriuss/apollo/compare/v5.0.0-alpha.28...v5.0.0-alpha.29) (2024-09-10)
 
 ## [5.0.0-alpha.28](https://github.com/DavisPuciriuss/apollo/compare/v5.0.0-alpha.27...v5.0.0-alpha.28) (2024-09-10)
