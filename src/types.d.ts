@@ -65,6 +65,11 @@ export type ClientConfig = {
   defaultOptions?: DefaultOptions;
 
   /**
+   * Configure additional link layers.
+   */
+  link?: ApolloLink;
+
+  /**
    * Configure the in-memory cache.
    **/
   inMemoryCacheOptions?: InMemoryCacheConfig;
@@ -103,11 +108,6 @@ export type ClientConfig = {
    * Configuration for the auth cookie.
    **/
   cookieAttributes?: CookieAttributes;
-
-  /**
-   * Apollo link definition for the client.
-   */
-  link?: ApolloLink;
 };
 
 export interface NuxtApolloConfig<T = false> {

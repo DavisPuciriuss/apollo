@@ -3,7 +3,7 @@ import { onError } from '@apollo/client/link/error'
 import { getMainDefinition } from '@apollo/client/utilities'
 import { createApolloProvider } from '@vue/apollo-option'
 import { ApolloClients, provideApolloClients } from '@vue/apollo-composable'
-import { ApolloClient, ApolloLink, createHttpLink, InMemoryCache, split } from '@apollo/client/core'
+import { ApolloClient, ApolloLink, createHttpLink, InMemoryCache, split, type GraphQLRequest } from '@apollo/client/core'
 import { GraphQLWsLink } from '@apollo/client/link/subscriptions'
 import { setContext } from '@apollo/client/link/context'
 import type { ClientConfig, ErrorResponse } from '../types'
@@ -21,104 +21,108 @@ export default defineNuxtPlugin((nuxtApp) => {
   const clients = {} as Record<ApolloClientKeys, ApolloClient<any>>
 
   for (const [key, clientConfig] of Object.entries(NuxtApollo.clients) as [ApolloClientKeys, ClientConfig][]) {
-    let link = null;
+    const getAuth = async () => {
+      const token = ref<string | null>(null)
 
-    if (!clientConfig.link) {
-      const getAuth = async () => {
-        const token = ref<string | null>(null)
-  
-        await nuxtApp.callHook('apollo:auth', { token, client: key })
-  
-        if (!token.value) {
-          if (clientConfig.tokenStorage === 'cookie') {
-            if (process.client) {
-              const t = useCookie(clientConfig.tokenName!).value
-              if (t) { token.value = t }
-            } else if (requestCookies?.cookie) {
-              const t = requestCookies.cookie.split(';').find(c => c.trim().startsWith(`${clientConfig.tokenName}=`))?.split('=')?.[1]
-              if (t) { token.value = t }
-            }
-          } else if (process.client && clientConfig.tokenStorage === 'localStorage') {
-            token.value = localStorage.getItem(clientConfig.tokenName!)
+      await nuxtApp.callHook('apollo:auth', { token, client: key })
+
+      if (!token.value) {
+        if (clientConfig.tokenStorage === 'cookie') {
+          if (process.client) {
+            const t = useCookie(clientConfig.tokenName!).value
+            if (t) { token.value = t }
+          } else if (requestCookies?.cookie) {
+            const t = requestCookies.cookie.split(';').find(c => c.trim().startsWith(`${clientConfig.tokenName}=`))?.split('=')?.[1]
+            if (t) { token.value = t }
           }
-  
-          if (!token.value) { return }
+        } else if (process.client && clientConfig.tokenStorage === 'localStorage') {
+          token.value = localStorage.getItem(clientConfig.tokenName!)
         }
-  
-        const authScheme = !!token.value?.match(/^[a-zA-Z]+\s/)?.[0]
-  
-        if (authScheme || clientConfig?.authType === null) { return token.value }
-  
-        return `${clientConfig?.authType} ${token.value}`
+
+        if (!token.value) { return }
       }
 
-      const authLink = setContext(async (_, { headers }) => {
-        const auth = await getAuth()
+      const authScheme = !!token.value?.match(/^[a-zA-Z]+\s/)?.[0]
 
-        if (!auth) { return }
+      if (authScheme || clientConfig?.authType === null) { return token.value }
 
-        return {
-          headers: {
-            ...headers,
-            ...(requestCookies && requestCookies),
-            [clientConfig.authHeader!]: auth
-          }
+      return `${clientConfig?.authType} ${token.value}`
+    }
+
+    const authLink = setContext(async (_, { headers }) => {
+      const auth = await getAuth()
+      await nuxtApp.callHook('apollo:appendHeaders', { client: key, request: _, headers: headers })
+
+      let returnableHeaders = {
+        headers: {
+          ...headers,
+          ...(requestCookies && requestCookies),
         }
-      })
+      }
 
-      const httpLink = authLink.concat(createHttpLink({
+      if (auth) {
+        returnableHeaders.headers[clientConfig.authHeader!] = auth
+      }
+
+      return returnableHeaders
+    })
+
+    let finalLayer = clientConfig.link
+
+    if (!finalLayer) {
+      finalLayer = createHttpLink({
         ...(clientConfig?.httpLinkOptions && clientConfig.httpLinkOptions),
         uri: (process.client && clientConfig.browserHttpEndpoint) || clientConfig.httpEndpoint,
         headers: { ...(clientConfig?.httpLinkOptions?.headers || {}) }
-      }))
+      })
+    }
 
-      const errorLink = onError((err) => {
-        nuxtApp.callHook('apollo:error', err)
+    const httpLink = authLink.concat(finalLayer)
+
+    const errorLink = onError((err) => {
+      nuxtApp.callHook('apollo:error', { client: key, error: err })
+    })
+
+    let wsLink: GraphQLWsLink | null = null
+
+    if (process.client && clientConfig.wsEndpoint) {
+      const wsClient = createRestartableClient({
+        ...clientConfig.wsLinkOptions,
+        url: clientConfig.wsEndpoint,
+        connectionParams: async () => {
+          const auth = await getAuth()
+
+          if (!auth) { return }
+
+          return { headers: { [clientConfig.authHeader!]: auth } }
+        }
       })
 
-      let wsLink: GraphQLWsLink | null = null
+      wsLink = new GraphQLWsLink(wsClient)
 
-      if (process.client && clientConfig.wsEndpoint) {
-        const wsClient = createRestartableClient({
-          ...clientConfig.wsLinkOptions,
-          url: clientConfig.wsEndpoint,
-          connectionParams: async () => {
-            const auth = await getAuth()
+      nuxtApp._apolloWsClients = nuxtApp._apolloWsClients || {}
 
-            if (!auth) { return }
-
-            return { headers: { [clientConfig.authHeader!]: auth } }
-          }
-        })
-
-        wsLink = new GraphQLWsLink(wsClient)
-
-        nuxtApp._apolloWsClients = nuxtApp._apolloWsClients || {}
-
-        // @ts-ignore
-        nuxtApp._apolloWsClients[key] = wsClient
-      }
-
-      link = ApolloLink.from([
-        errorLink,
-        ...(!wsLink
-          ? [httpLink]
-          : [
-              ...(clientConfig?.websocketsOnly
-                ? [wsLink]
-                : [
-                    split(({ query }) => {
-                      const definition = getMainDefinition(query)
-                      return (definition.kind === 'OperationDefinition' && definition.operation === 'subscription')
-                    },
-                    wsLink,
-                    httpLink)
-                  ])
-            ])
-      ])
-    } else {
-      link = clientConfig.link
+      // @ts-ignore
+      nuxtApp._apolloWsClients[key] = wsClient
     }
+
+    const link = ApolloLink.from([
+      errorLink,
+      ...(!wsLink
+        ? [httpLink]
+        : [
+            ...(clientConfig?.websocketsOnly
+              ? [wsLink]
+              : [
+                  split(({ query }) => {
+                    const definition = getMainDefinition(query)
+                    return (definition.kind === 'OperationDefinition' && definition.operation === 'subscription')
+                  },
+                  wsLink,
+                  httpLink)
+                ])
+          ])
+    ])
 
     const cache = new InMemoryCache(clientConfig.inMemoryCacheOptions)
 
@@ -165,7 +169,8 @@ export default defineNuxtPlugin((nuxtApp) => {
 
 export interface ModuleRuntimeHooks {
   'apollo:auth': (params: { client: ApolloClientKeys, token: Ref<string | null> }) => void
-  'apollo:error': (error: ErrorResponse) => void
+  'apollo:appendHeaders': (params: { client: ApolloClientKeys, request: GraphQLRequest, headers: Record<string, string> }) => void
+  'apollo:error': (params: { client: ApolloClientKeys, error: ErrorResponse }) => void
 }
 
 interface DollarApolloHelpers extends ReturnType<typeof useApollo> {}
