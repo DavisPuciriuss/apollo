@@ -1,5 +1,5 @@
 import type { ClientOptions } from 'graphql-ws'
-import type { HttpOptions, DefaultOptions, InMemoryCacheConfig, ApolloLink } from '@apollo/client'
+import type { HttpOptions, DefaultOptions, InMemoryCacheConfig } from '@apollo/client/core'
 import type { CookieOptions } from 'nuxt/app'
 import type { Nuxt } from '@nuxt/schema';
 export type { ErrorResponse } from '@apollo/client/link/error'
@@ -65,9 +65,9 @@ export type ClientConfig = {
   defaultOptions?: DefaultOptions;
 
   /**
-   * Configure additional link layers.
+   * Configure additional Apollo Link, that will use persisted queries.
    */
-  link?: ApolloLink;
+  usePersistedQuery?: boolean;
 
   /**
    * Configure the in-memory cache.
