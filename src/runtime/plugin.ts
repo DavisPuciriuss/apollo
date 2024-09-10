@@ -3,7 +3,7 @@ import { onError } from '@apollo/client/link/error'
 import { getMainDefinition } from '@apollo/client/utilities'
 import { createApolloProvider } from '@vue/apollo-option'
 import { ApolloClients, provideApolloClients } from '@vue/apollo-composable'
-import { ApolloClient, ApolloLink, createHttpLink, InMemoryCache, split, type GraphQLRequest } from '@apollo/client/core'
+import { ApolloClient, ApolloLink, createHttpLink, InMemoryCache, split, type DefaultContext, type GraphQLRequest } from '@apollo/client/core'
 import { GraphQLWsLink } from '@apollo/client/link/subscriptions'
 import { setContext } from '@apollo/client/link/context'
 import type { ClientConfig, ErrorResponse } from '../types'
@@ -49,22 +49,24 @@ export default defineNuxtPlugin((nuxtApp) => {
       return `${clientConfig?.authType} ${token.value}`
     }
 
-    const authLink = setContext(async (_, { headers }) => {
+    const authLink = setContext(async (_: GraphQLRequest, prevContext: DefaultContext) => {
       const auth = await getAuth()
-      await nuxtApp.callHook('apollo:appendHeaders', { client: key, request: _, headers: headers })
+      let _headers = ref<Record<string, string>>(prevContext.headers || {})
+      await nuxtApp.callHook('apollo:appendHeaders', { client: key, request: _, headers: _headers })
 
-      let returnableHeaders = {
-        headers: {
-          ...headers,
-          ...(requestCookies && requestCookies),
-        }
+      if (requestCookies && requestCookies.cookie) {
+        _headers.value = { ..._headers.value, cookie: requestCookies.cookie }
       }
 
       if (auth) {
-        returnableHeaders.headers[clientConfig.authHeader!] = auth
+        _headers.value = { ..._headers.value, [clientConfig.authHeader!]: auth }
       }
 
-      return returnableHeaders
+      return {
+        headers: {
+          ..._headers,
+        }
+      }
     })
 
     let finalLayer = clientConfig.link
@@ -164,7 +166,7 @@ export default defineNuxtPlugin((nuxtApp) => {
 
 export interface ModuleRuntimeHooks {
   'apollo:auth': (params: { client: ApolloClientKeys, token: Ref<string | null> }) => void
-  'apollo:appendHeaders': (params: { client: ApolloClientKeys, request: GraphQLRequest, headers: Record<string, string> }) => void
+  'apollo:appendHeaders': (params: { client: ApolloClientKeys, request: GraphQLRequest, headers: Ref<Record<string, string>> }) => void
   'apollo:error': (params: { client: ApolloClientKeys, error: ErrorResponse }) => void
 }
 
