@@ -51,22 +51,29 @@ export default defineNuxtPlugin((nuxtApp) => {
       return `${clientConfig?.authType} ${token.value}`
     }
 
-    const authLink = setContext(async (_: GraphQLRequest, prevContext: DefaultContext) => {
+    const authLink = setContext(async (_: GraphQLRequest, { headers }) => {
       const auth = await getAuth()
-      let _headers = ref<Record<string, string>>(prevContext.headers || {})
-      await nuxtApp.callHook('apollo:appendHeaders', { client: key, request: _, headers: _headers })
-
-      if (requestCookies && requestCookies.cookie) {
-        _headers.value = { ..._headers.value, cookie: requestCookies.cookie }
-      }
+      const _headers = ref<Record<string, string>>({});
+      const _request = ref<GraphQLRequest>(_);
+      await nuxtApp.callHook('apollo:appendHeaders', { client: key, request: _request, headers: _headers })
 
       if (auth) {
         _headers.value = { ..._headers.value, [clientConfig.authHeader!]: auth }
       }
 
+      if (_request.value?.extensions) {
+        if (!_.extensions) { _.extensions = {} }
+
+        for (const key in _request.value.extensions) {
+          _.extensions[key] = _request.value.extensions[key]
+        }
+      }
+
       return {
         headers: {
+          ...headers,
           ..._headers.value,
+          ...(requestCookies && requestCookies)
         }
       }
     })
@@ -172,7 +179,7 @@ export default defineNuxtPlugin((nuxtApp) => {
 
 export interface ModuleRuntimeHooks {
   'apollo:auth': (params: { client: ApolloClientKeys, token: Ref<string | null> }) => void
-  'apollo:appendHeaders': (params: { client: ApolloClientKeys, request: GraphQLRequest, headers: Ref<Record<string, string>> }) => void
+  'apollo:appendHeaders': (params: { client: ApolloClientKeys, request: Ref<GraphQLRequest>, headers: Ref<Record<string, string>> }) => void
   'apollo:error': (params: { client: ApolloClientKeys, error: ErrorResponse }) => void
 }
 

@@ -2,16 +2,24 @@ import type { ErrorResponse } from '@nuxtjs/apollo'
 
 export default defineNuxtPlugin((nuxtApp) => {
   // Nuxt Apollo auth hook
-  nuxtApp.hook('apollo:auth', ({ client, token }) => {
-    if (client !== 'todos') { return }
+  // nuxtApp.hook('apollo:auth', ({ client, token }) => {
+  //   if (client !== 'todos') { return }
 
-    // Pass token to the `todos` client
-    token.value = '<secret_token>'
-  })
+  //   // Pass token to the `todos` client
+  //   token.value = '<secret_token>'
+  // })
 
-  // Nuxt Apollo error hook
-  nuxtApp.hook('apollo:error', (error: ErrorResponse) => {
-    // eslint-disable-next-line no-console
-    console.log('Apollo Error Handler', error)
+  // // Nuxt Apollo error hook
+  // nuxtApp.hook('apollo:error', (error: ErrorResponse) => {
+  //   // eslint-disable-next-line no-console
+  //   console.log('Apollo Error Handler', error)
+  // })
+
+  nuxtApp.hooks.hook('apollo:appendHeaders', ({ client, request, headers }) => {
+    (request.value.extensions ??= {}).language = 'lv';
+
+    headers.value['Set-Language'] = 'lv';
+
+    console.log({...headers.value});
   })
 })
