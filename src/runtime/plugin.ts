@@ -12,12 +12,10 @@ import createRestartableClient from './ws'
 import { useApollo } from './composables'
 import { ref, useCookie, defineNuxtPlugin, useRequestHeaders } from '#imports'
 import type { Ref } from '#imports'
-import { createHash } from 'crypto'
+import { sha256 } from 'ohash'
 
 import { NuxtApollo } from '#apollo'
 import type { ApolloClientKeys } from '#apollo'
-
-const sha256 = (data: string): string => createHash('sha256').update(data).digest('hex');
 
 export default defineNuxtPlugin((nuxtApp) => {
   const requestCookies = (process.server && NuxtApollo.proxyCookies && useRequestHeaders(['cookie'])) || undefined
