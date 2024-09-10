@@ -64,7 +64,7 @@ export default defineNuxtPlugin((nuxtApp) => {
 
       return {
         headers: {
-          ..._headers,
+          ..._headers.value,
         }
       }
     })
